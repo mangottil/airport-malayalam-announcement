@@ -13,6 +13,20 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Airport, Weather & Prayer Comprehensive Malayalam API is Live!');
 });
 
+// Safe time extractor to prevent any parsing crash
+function extractTime(dateTimeStr: string): string {
+    if (!dateTimeStr) return 'സമയം ലഭ്യമല്ല';
+    if (dateTimeStr.includes('T')) {
+        const parts = dateTimeStr.split('T');
+        if (parts[1]) return parts[1].substring(0, 5);
+    }
+    if (dateTimeStr.includes(' ')) {
+        const parts = dateTimeStr.split(' ');
+        if (parts[1]) return parts[1].substring(0, 5);
+    }
+    return dateTimeStr;
+}
+
 // Comprehensive Global Mapping Database (US, UK, Europe, Gulf, Asia, Pilgrimage Hubs & Sri Lanka)
 function getDestinationName(iata: string, isArrival: boolean): string {
     const database: { [key: string]: { from: string, to: string } } = {
@@ -76,7 +90,7 @@ function getDestinationName(iata: string, isArrival: boolean): string {
         "COK": { from: "കൊച്ചിയിൽ നിന്നും", to: "കൊച്ചിയിലേക്ക്" },
         "CJB": { from: "കോയമ്പത്തൂരിൽ നിന്നും", to: "കോയമ്പത്തൂരിലേക്ക്" },
         "DEL": { from: "ഡൽഹിയിൽ നിന്നും", to: "ഡൽഹിയിലേക്ക്" },
-        "CCU": { from: "കൊൽക്കത്തയിൽ നിന്നും", to: "കൊൽക്കത്തയിൽ നിന്നും" },
+        "CCU": { from: "കൊൽക്കത്തയിൽ നിന്നും", to: "കൊൽക്കത്തയിലേക്ക്" },
         "PNQ": { from: "പൂനെയിൽ നിന്നും", to: "പൂനെയിലേക്ക്" },
         "AMD": { from: "അഹമ്മദാബാദിൽ നിന്നും", to: "അഹമ്മദാബാദിലേക്ക്" }
     };
@@ -123,25 +137,27 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
             `അടുത്ത നാല് മണിക്കൂറിലെ ഫ്ലൈറ്റ് വിവരങ്ങൾ.`
         ];
 
+        // Process Arrivals
         if (upcomingArrivals.length > 0) {
             textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ.`);
             upcomingArrivals.forEach((f: any) => {
-                const origin = getDestinationName(f.dep_iata || '', true);
-                const timeStr = f.arr_time ? f.arr_time.split(' ')[1] : 'സമയം ലഭ്യമല്ല';
+                const originText = getDestinationName(f.dep_iata || '', true);
+                const timeStr = extractTime(f.arr_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
-                textChunks.push(`${origin} ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, ${airportMalayalamName} എത്തിച്ചേരുന്ന സമയം ${timeStr}.`);
+                textChunks.push(`${originText} ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, ${airportMalayalamName} എത്തിച്ചേരുന്ന സമയം ${timeStr}.`);
             });
         } else {
             textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
         }
 
+        // Process Departures
         if (upcomingDepartures.length > 0) {
             textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ.`);
             upcomingDepartures.forEach((f: any) => {
-                const destination = getDestinationName(f.arr_iata || '', false);
-                const timeStr = f.dep_time ? f.dep_time.split(' ')[1] : 'സമയം ലഭ്യമല്ല';
+                const destText = getDestinationName(f.arr_iata || '', false);
+                const timeStr = extractTime(f.dep_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
-                textChunks.push(`${airportMalayalamName} നിന്നും ${destination} പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, സമയം ${timeStr}.`);
+                textChunks.push(`${airportMalayalamName} നിന്നും ${destText} പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, സമയം ${timeStr}.`);
             });
         } else {
             textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
@@ -164,31 +180,24 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
     }
 }
 
-function textchunks_push_safe(arr: string[], val: string) {
-    arr.push(val);
-}
-
-// 5th Click: Calicut Airport (CCJ)
+// Airport Endpoints
 app.get('/api/calicut', async (req: Request, res: Response) => {
     await handleAirportRequest('CCJ', 'കോഴിക്കോട് കരിപ്പൂർ അന്താരാഷ്ട്ര വിമാനത്താവളം', res);
 });
 
-// 6th Click: Kochi Airport (COK)
 app.get('/api/kochi', async (req: Request, res: Response) => {
     await handleAirportRequest('COK', 'കൊച്ചി നെടുമ്പാശ്ശേരി അന്താരാഷ്ട്ര വിമാനത്താവളം', res);
 });
 
-// 7th Click: Trivandrum Airport (TRV)
 app.get('/api/trivandrum', async (req: Request, res: Response) => {
     await handleAirportRequest('TRV', 'തിരുവനന്തപുരം അന്താരാഷ്ട്ര വിമാനത്താവളം', res);
 });
 
-// 8th Click: Coimbatore Airport (CJB)
 app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest('CJB', 'കോയമ്പത്തൂർ വിമാനത്താവളം', res);
 });
 
-// 9th Click: Prayer Times API Endpoint (Aladhan - Direct Open Raw Endpoint for Tirur Vattathani)
+// Prayer Times Endpoint (Tirur Vattathani)
 app.get('/api/prayer', async (req: Request, res: Response) => {
     try {
         const prayerUrl = `https://api.aladhan.com/v1/timings?latitude=10.9526&longitude=75.8989&method=2&utcOffset=+530`;
@@ -217,7 +226,7 @@ app.get('/api/prayer', async (req: Request, res: Response) => {
     }
 });
 
-// 10th Click: Weather API Endpoint (Tirur Vattathani)
+// Weather Endpoint (Tirur Vattathani)
 app.get('/api/weather', async (req: Request, res: Response) => {
     try {
         const lat = "10.9526"; 
