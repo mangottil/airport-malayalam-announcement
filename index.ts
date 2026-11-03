@@ -82,7 +82,7 @@ function getDestinationName(iata: string, isArrival: boolean): string {
     return isArrival ? `${iata}-ൽ നിന്നും` : `${iata}-ലേക്ക്`;
 }
 
-// Robust Airport Request Handler with Pure IST 4-Hour Window Filtering
+// Clean Airport Request Handler (Omits 'No flights' sentences to keep announcements professional)
 async function handleAirportRequest(iataCode: string, airportMalayalamName: string, res: Response) {
     try {
         const { currentIST, fourHoursLaterIST } = getISTWindows();
@@ -117,28 +117,29 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
             `അടുത്ത നാല് മണിക്കൂറിലെ ഫ്ലൈറ്റ് വിവരങ്ങൾ.`
         ];
 
+        // Only add arrivals if they exist (No "no flights" spoken message)
         if (upcomingArrivals.length > 0) {
-            textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ.`);
             upcomingArrivals.forEach((f: any) => {
                 const originText = getDestinationName(f.dep_iata || '', true);
                 const timeStr = extractTime(f.arr_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
                 textChunks.push(`${originText} ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, ${airportMalayalamName} എത്തിച്ചേരുന്ന സമയം ${timeStr}.`);
             });
-        } else {
-            textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
         }
 
+        // Only add departures if they exist (No "no flights" spoken message)
         if (upcomingDepartures.length > 0) {
-            textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ.`);
             upcomingDepartures.forEach((f: any) => {
                 const destText = getDestinationName(f.arr_iata || '', false);
                 const timeStr = extractTime(f.dep_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
                 textChunks.push(`${airportMalayalamName} നിന്നും ${destText} പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, സമയം ${timeStr}.`);
             });
-        } else {
-            textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
+        }
+
+        // If both are empty, we can optionally add a clean closing or just keep it minimal
+        if (upcomingArrivals.length === 0 && upcomingDepartures.length === 0) {
+            textChunks.push(`നിലവിൽ അടുത്ത നാല് മണിക്കൂറിനുള്ളിൽ ഷെഡ്യൂൾ ചെയ്ത ഫ്ലൈറ്റുകൾ ഒന്നും ലഭ്യമല്ല.`);
         }
 
         res.json({
@@ -175,7 +176,7 @@ app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest('CJB', 'കോയമ്പത്തൂർ വിമാനത്താവളം', res);
 });
 
-// Prayer Times & Full Islamic (Hijri) Calendar Endpoint (Tirur Vattathani - Cleaned: No Sunrise/Sunset, No Lat/Lon)
+// Prayer Times & Full Islamic (Hijri) Calendar Endpoint (Tirur Vattathani)
 app.get('/api/prayer', async (req: Request, res: Response) => {
     try {
         const prayerUrl = `https://api.aladhan.com/v1/timings?latitude=10.9526&longitude=75.8989&method=2&utcOffset=+530`;
@@ -189,7 +190,6 @@ app.get('/api/prayer', async (req: Request, res: Response) => {
             `ഹിജ്‌റ വർഷം ${hijri.year}, ${hijri.month.en} മാസം ${hijri.day} തീയതി.`
         ];
 
-        // Map all standard prayer and related times except Sunrise and Sunset
         const prayerNames: { [key: string]: string } = {
             "Fajr": "സുബ്ഹി",
             "Dhuhr": "ദുഹ്ർ",
