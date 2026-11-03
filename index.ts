@@ -4,6 +4,7 @@ import axios from 'axios';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// API keys securely pulled from Render Environment Variables
 const AIRLABS_API_KEY = process.env.AIRLABS_API_KEY || "";
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY || "";
 
@@ -13,39 +14,66 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Airport, Weather & Prayer Comprehensive Malayalam API is Live!');
 });
 
-// Helper: Get Current exact IST Date and Time Windows
-function getISTWindows(): { currentIST: Date, fourHoursLaterIST: Date } {
-    const nowUTC = new Date();
-    const currentIST = new Date(nowUTC.getTime() + (nowUTC.getTimezoneOffset() * 60000) + (5.5 * 60 * 60 * 1000));
-    const fourHoursLaterIST = new Date(currentIST.getTime() + 4 * 60 * 60 * 1000);
-    return { currentIST, fourHoursLaterIST };
+// Helper: Get Current exact IST Minutes from UTC server time
+function getCurrentISTMinutes(): number {
+    const now = new Date();
+    const utcHours = now.getUTCHours();
+    const utcMins = now.getUTCMinutes();
+    
+    // Add IST Offset (+5 hours 30 minutes = 330 minutes)
+    let istTotalMins = (utcHours * 60 + utcMins) + 330;
+    istTotalMins = istTotalMins % (24 * 60); // Normalize within 24 hours
+    return istTotalMins;
 }
 
-// Convert AirLabs schedule time string safely to IST Date object
-function parseAirLabsTimeAsIST(dateTimeStr: string): Date {
-    if (!dateTimeStr) return new Date(0);
-    let formattedStr = dateTimeStr.includes('Z') || dateTimeStr.includes('+') ? dateTimeStr : dateTimeStr.replace(' ', 'T') + 'Z';
-    let d = new Date(formattedStr);
-    if (isNaN(d.getTime())) {
-        d = new Date(dateTimeStr);
-    }
-    const utcMs = d.getTime() + (d.getTimezoneOffset() * 60000);
-    const istMs = utcMs + (5.5 * 60 * 60 * 1000);
-    return new Date(istMs);
-}
-
-// Safe time extractor for announcement speech (HH:mm)
-function extractTime(dateTimeStr: string): string {
-    if (!dateTimeStr) return 'സമയം ലഭ്യമല്ല';
-    if (dateTimeStr.includes(' ')) {
-        const parts = dateTimeStr.split(' ');
-        if (parts[1]) return parts[1].substring(0, 5);
-    }
+// Convert AirLabs UTC time string (e.g. "2026-11-04 19:00" or ISO) to IST Minutes from midnight
+function airLabsTimeToISTMinutes(dateTimeStr: string): number {
+    if (!dateTimeStr) return -1;
+    
+    let timePart = "";
     if (dateTimeStr.includes('T')) {
-        const parts = dateTimeStr.split('T');
-        if (parts[1]) return parts[1].substring(0, 5);
+        timePart = dateTimeStr.split('T')[1].substring(0, 5);
+    } else if (dateTimeStr.includes(' ')) {
+        timePart = dateTimeStr.split(' ')[1].substring(0, 5);
+    } else {
+        timePart = dateTimeStr.substring(0, 5);
     }
-    return dateTimeStr;
+
+    if (!timePart || !timePart.includes(':')) return -1;
+    const parts = timePart.split(':');
+    const hours = parseInt(parts[0], 10);
+    const mins = parseInt(parts[1], 10);
+
+    if (isNaN(hours) || isNaN(mins)) return -1;
+
+    // Convert UTC to IST (+5h 30m)
+    let totalMins = (hours * 60 + mins) + 330;
+    totalMins = totalMins % (24 * 60);
+    return totalMins;
+}
+
+// Check if flight IST minutes falls strictly within Next 4 Hours (240 minutes)
+function isWithinNext4Hours(flightMins: number, currentMins: number): boolean {
+    if (flightMins === -1) return false;
+    
+    let endMins = currentMins + 240; // Next 4 hours
+
+    if (endMins < 1440) {
+        return flightMins >= currentMins && flightMins <= endMins;
+    } else {
+        let normalizedEnd = endMins - 1440;
+        return (flightMins >= currentMins && flightMins < 1440) || (flightMins >= 0 && flightMins <= normalizedEnd);
+    }
+}
+
+// Safe time extractor for announcement speech (HH:mm in IST)
+function extractISTTimeString(dateTimeStr: string): string {
+    const flightMins = airLabsTimeToISTMinutes(dateTimeStr);
+    if (flightMins === -1) return 'സമയം ലഭ്യമല്ല';
+    
+    const h = Math.floor(flightMins / 60);
+    const m = flightMins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 // Comprehensive Global Mapping Database
@@ -94,21 +122,21 @@ function translateHolidayToMalayalam(holidayName: string): string {
     if (nameLower.includes("fitr")) return "ഈദുൽ ഫിത്ർ (ചെറിയ പെരുന്നാൾ)";
     if (nameLower.includes("arafah")) return "അറഫാ ദിനം";
     if (nameLower.includes("adha")) return "ഈദുൽ അദ്ഹാ (ബലിപെരുന്നാൾ)";
-    return holidayName; // Fallback to original if not matched
+    return holidayName;
 }
 
-// Robust Airport Request Handler with Pure IST 4-Hour Window Filtering
+// Robust Airport Request Handler with Exact Minute-Based IST 4-Hour Window Filtering
 async function handleAirportRequest(iataCode: string, airportMalayalamName: string, res: Response) {
     try {
-        const { currentIST, fourHoursLaterIST } = getISTWindows();
+        const currentISTMins = getCurrentISTMinutes();
 
         const [arrResponse, depResponse] = await Promise.all([
             axios.get(`https://airlabs.co/api/v9/schedules`, {
-                params: { api_key: AIRLABS_API_KEY, arr_iata: iataCode, limit: 40 }
+                params: { api_key: AIRLABS_API_KEY, arr_iata: iataCode, limit: 80 }
             }).catch(() => ({ data: { response: [] } })),
             
             axios.get(`https://airlabs.co/api/v9/schedules`, {
-                params: { api_key: AIRLABS_API_KEY, dep_iata: iataCode, limit: 40 }
+                params: { api_key: AIRLABS_API_KEY, dep_iata: iataCode, limit: 80 }
             }).catch(() => ({ data: { response: [] } }))
         ]);
 
@@ -117,14 +145,14 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
 
         const upcomingArrivals = arrivals.filter((f: any) => {
             if (!f.arr_time) return false;
-            const flightTimeIST = parseAirLabsTimeAsIST(f.arr_time);
-            return flightTimeIST >= currentIST && flightTimeIST <= fourHoursLaterIST;
+            const flightMins = airLabsTimeToISTMinutes(f.arr_time);
+            return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
         const upcomingDepartures = departures.filter((f: any) => {
             if (!f.dep_time) return false;
-            const flightTimeIST = parseAirLabsTimeAsIST(f.dep_time);
-            return flightTimeIST >= currentIST && flightTimeIST <= fourHoursLaterIST;
+            const flightMins = airLabsTimeToISTMinutes(f.dep_time);
+            return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
         let textChunks: string[] = [
@@ -135,7 +163,7 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
         if (upcomingArrivals.length > 0) {
             upcomingArrivals.forEach((f: any) => {
                 const originText = getDestinationName(f.dep_iata || '', true);
-                const timeStr = extractTime(f.arr_time);
+                const timeStr = extractISTTimeString(f.arr_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
                 textChunks.push(`${originText} ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, ${airportMalayalamName} എത്തിച്ചേരുന്ന സമയം ${timeStr}.`);
             });
@@ -144,7 +172,7 @@ async function handleAirportRequest(iataCode: string, airportMalayalamName: stri
         if (upcomingDepartures.length > 0) {
             upcomingDepartures.forEach((f: any) => {
                 const destText = getDestinationName(f.arr_iata || '', false);
-                const timeStr = extractTime(f.dep_time);
+                const timeStr = extractISTTimeString(f.dep_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
                 textChunks.push(`${airportMalayalamName} നിന്നും ${destText} പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, സമയം ${timeStr}.`);
             });
@@ -186,7 +214,7 @@ app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest('CJB', 'കോയമ്പത്തൂർ വിമാനത്താവളം', res);
 });
 
-// Prayer Times & Cleaned Islamic (Hijri) Calendar Endpoint with Malayalam Holiday Translation
+// Prayer Times & Cleaned Islamic (Hijri) Calendar Endpoint
 app.get('/api/prayer', async (req: Request, res: Response) => {
     try {
         const prayerUrl = `https://api.aladhan.com/v1/timings?latitude=10.9526&longitude=75.8989&method=2&utcOffset=+530`;
@@ -201,7 +229,6 @@ app.get('/api/prayer', async (req: Request, res: Response) => {
             `ഇന്നത്തെ ഹിജ്‌റ തീയതി: ${hijri.day}-ാം തീയതി, ${hijri.month.en} (${hijri.month.ar}) മാസം, ഹിജ്‌റ വർഷം ${hijri.year}.`
         ];
 
-        // Translate and append special holidays if reported by the API
         if (holidays && holidays.length > 0) {
             const translatedHolidays = holidays.map((h: string) => translateHolidayToMalayalam(h));
             prayerChunks.push(`ഇന്നത്തെ പ്രത്യേക വിശേഷ ദിവസം: ${translatedHolidays.join(', ')}.`);
@@ -233,7 +260,7 @@ app.get('/api/prayer', async (req: Request, res: Response) => {
     }
 });
 
-// Weather Endpoint (Tirur Vattathani) - Comprehensive, Elegant Malayalam Literary Translation
+// Weather Endpoint (Tirur Vattathani)
 app.get('/api/weather', async (req: Request, res: Response) => {
     try {
         const lat = "10.9526"; 
