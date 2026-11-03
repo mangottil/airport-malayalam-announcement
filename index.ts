@@ -1,142 +1,172 @@
 import express, { Request, Response } from 'express';
 import axios from 'axios';
-const gTTS = require('gtts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// API Keys from Render Environment Variables
 const AIRLABS_API_KEY = process.env.AIRLABS_API_KEY || "";
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY || "";
 
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
-    res.send('Malayalam Announcement Server (Airport, Weather & Prayer) is Live!');
+    res.send('Airport & Weather Micro-Chunks Malayalam API is Live and Running!');
 });
 
-// 1. AIRPORT ANNOUNCEMENTS (Clicks 5 to 8)
-app.get('/airport/:name', async (req: Request, res: Response) => {
-    const airportCode = req.params.name.toLowerCase();
-    let iataCode = "";
-    let airportMalayalamName = "";
-
-    if (airportCode === 'calicut') {
-        iataCode = "CCJ";
-        airportMalayalamName = "കോഴിക്കോട് അന്താരാഷ്ട്ര വിമാനത്താവളം.";
-    } else if (airportCode === 'cochin') {
-        iataCode = "COK";
-        airportMalayalamName = "കൊച്ചി അന്താരാഷ്ട്ര വിമാനത്താവളം നെടുമ്പാശ്ശേരി.";
-    } else if (airportCode === 'trivandrum') {
-        iataCode = "TRV";
-        airportMalayalamName = "തിരുവനന്തപുരം അന്താരാഷ്ട്ര വിമാനത്താവളം.";
-    } else if (airportCode === 'coimbatore') {
-        iataCode = "CJB";
-        airportMalayalamName = "കോയമ്പത്തൂർ വിമാനത്താവളം.";
-    } else {
-        return res.status(400).json({ error: "Invalid airport name." });
-    }
-
+// Helper function to fetch Arrivals and Departures separately and chunk them in Malayalam
+async function handleAirportRequest(iataCode: string, airportMalayalamName: string, res: Response) {
     try {
         const now = new Date();
         const fourHoursLater = new Date(now.getTime() + 4 * 60 * 60 * 1000);
 
-        const arrResponse = await axios.get(`https://airlabs.co/api/v9/schedules`, {
-            params: { api_key: AIRLABS_API_KEY, arr_iata: iataCode }
-        });
-        const depResponse = await axios.get(`https://airlabs.co/api/v9/schedules`, {
-            params: { api_key: AIRLABS_API_KEY, dep_iata: iataCode }
-        });
+        // Making separate calls for Arrivals and Departures as required
+        const [arrResponse, depResponse] = await Promise.all([
+            axios.get(`https://airlabs.co/api/v9/schedules`, {
+                params: { api_key: AIRLABS_API_KEY, arr_iata: iataCode, limit: 5 }
+            }).catch(() => ({ data: { response: [] } })),
+            
+            axios.get(`https://airlabs.co/api/v9/schedules`, {
+                params: { api_key: AIRLABS_API_KEY, dep_iata: iataCode, limit: 5 }
+            }).catch(() => ({ data: { response: [] } }))
+        ]);
 
-        const arrivals = arrResponse.data.response || [];
-        const departures = depResponse.data.response || [];
+        const arrivals = arrResponse.data?.response || [];
+        const departures = depResponse.data?.response || [];
 
+        // Filtering upcoming flights within the next 4 hours
         const upcomingArrivals = arrivals.filter((f: any) => {
             if (!f.arr_time) return false;
-            const arrTime = new Date(f.arr_time);
-            return arrTime >= now && arrTime <= fourHoursLater;
+            const t = new Date(f.arr_time);
+            return t >= now && t <= fourHoursLater;
         });
 
         const upcomingDepartures = departures.filter((f: any) => {
             if (!f.dep_time) return false;
-            const depTime = new Date(f.dep_time);
-            return depTime >= now && depTime <= fourHoursLater;
+            const t = new Date(f.dep_time);
+            return t >= now && t <= fourHoursLater;
         });
 
-        let malayalamSpeech = `${airportMalayalamName} തത്സമയ അനൗൺസ്മെന്റ്. `;
+        // Building small micro-chunks for ESP32 memory safety
+        let textChunks: string[] = [
+            `${airportMalayalamName} അനൗൺസ്മെന്റ്.`,
+            `അടുത്ത നാല് മണിക്കൂറിലെ വിവരങ്ങൾ.`
+        ];
 
+        // Process Arrivals chunks
         if (upcomingArrivals.length > 0) {
-            malayalamSpeech += `വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ: `;
+            textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ ഉണ്ട്.`);
             upcomingArrivals.forEach((f: any) => {
-                const timeStr = f.arr_time ? f.arr_time.split(' ')[1] : '';
-                malayalamSpeech += `നമ്പർ ${f.flight_number}, സമയം ${timeStr}. `;
+                const timeStr = f.arr_time ? f.arr_time.split(' ')[1] : 'സമയം ഇല്ല';
+                const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
+                textChunks.push(`ഫ്ലൈറ്റ് ${flightNo}`);
+                textChunks.push(`സമയം ${timeStr}`);
             });
         } else {
-            malayalamSpeech += `അടുത്ത നാല് മണിക്കൂറിൽ വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല. `;
+            textChunks.push(`വന്നെത്തുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
         }
 
+        // Process Departures chunks
         if (upcomingDepartures.length > 0) {
-            malayalamSpeech += `പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ: `;
+            textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ ഉണ്ട്.`);
             upcomingDepartures.forEach((f: any) => {
-                const timeStr = f.dep_time ? f.dep_time.split(' ')[1] : '';
-                malayalamSpeech += `നമ്പർ ${f.flight_number}, സമയം ${timeStr}. `;
+                const timeStr = f.dep_time ? f.dep_time.split(' ')[1] : 'സമയം ഇല്ല';
+                const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
+                textChunks.push(`ഫ്ലൈറ്റ് ${flightNo}`);
+                textChunks.push(`സമയം ${timeStr}`);
             });
         } else {
-            malayalamSpeech += `അടുത്ത നാല് മണിക്കൂറിൽ പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`;
+            textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റുകൾ ഇല്ല.`);
         }
 
-        const gtts = new gTTS(malayalamSpeech, 'ml');
-        res.setHeader('Content-Type', 'audio/mpeg');
-        gtts.stream().pipe(res);
+        // Sending structured small chunks in JSON response
+        res.json({
+            status: "success",
+            airport: airportMalayalamName,
+            total_chunks: textChunks.length,
+            chunks: textChunks
+        });
 
-    } catch (error) {
-        console.error("Airport Error:", error);
-        res.status(500).json({ error: "Failed to fetch schedules." });
+    } catch (error: any) {
+        console.error("AirLabs API Error:", error.message);
+        res.status(500).json({ 
+            status: "error", 
+            message: "Failed to fetch airport schedules",
+            chunks: ["വിവരങ്ങൾ ലഭ്യമാക്കുന്നതിൽ തടസ്സം നേരിട്ടു."]
+        });
     }
+}
+
+// 1. Calicut Airport Endpoint
+app.get('/api/calicut', async (req: Request, res: Response) => {
+    await handleAirportRequest('CCJ', 'കോഴിക്കോട് കരിപ്പൂർ എയർപോർട്ട്', res);
 });
 
-// 2. WEATHER FORECAST FOR VATTATHANI (Click 9)
-app.get('/weather/vattathani', async (req: Request, res: Response) => {
-    try {
-        const lat = "10.9148"; 
-        const lon = "75.9235";
-        
-        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${WEATHER_API_KEY}`;
-        const response = await axios.get(weatherUrl);
-        const data = response.data;
+// 2. Kochi Airport Endpoint
+app.get('/api/kochi', async (req: Request, res: Response) => {
+    await handleAirportRequest('COK', 'കൊച്ചി നെടുമ്പാശ്ശേരി എയർപോർട്ട്', res);
+});
 
+// 3. Trivandrum Airport Endpoint
+app.get('/api/trivandrum', async (req: Request, res: Response) => {
+    await handleAirportRequest('TRV', 'തിരുവനന്തപുരം എയർപോർട്ട്', res);
+});
+
+// 4. Coimbatore Airport Endpoint
+app.get('/api/coimbatore', async (req: Request, res: Response) => {
+    await handleAirportRequest('CJB', 'കോയമ്പത്തൂർ എയർപോർട്ട്', res);
+});
+
+// 5. Weather API Endpoint (Vattathani) split into safe micro-chunks
+app.get('/api/weather', async (req: Request, res: Response) => {
+    try {
+        const lat = "10.9526"; 
+        const lon = "75.8989";
+        
+        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather`;
+        const response = await axios.get(weatherUrl, {
+            params: {
+                lat: lat,
+                lon: lon,
+                units: 'metric',
+                lang: 'ml', // Malayalam weather description
+                appid: WEATHER_API_KEY
+            }
+        });
+        
+        const data = response.data;
         const temp = Math.round(data.main.temp);
         const humidity = data.main.humidity;
         const windSpeed = data.wind.speed;
+        const description = data.weather[0]?.description || "വ്യക്തമല്ല";
+        const rain1h = data.rain && data.rain['1h'] ? data.rain['1h'] : 0;
 
-        let weatherSpeech = `വട്ടത്താണി കാലാവസ്ഥ വിവരങ്ങൾ. നിലവിലെ താപനില ${temp} ഡിഗ്രി സെൽഷ്യസ്. ആർദ്രത ${humidity} ശതമാനം. കാറ്റിന്റെ വേഗത മണിക്കൂറിൽ ${windSpeed} മീറ്റർ.`;
+        // Micro-chunks array for Weather
+        let weatherChunks: string[] = [
+            "വട്ടത്താണി കാലാവസ്ഥ.",
+            `താപനില ${temp} ഡിഗ്രി.`,
+            `അവസ്ഥ ${description}.`,
+            `ആർദ്രത ${humidity} ശതമാനം.`,
+            `കാറ്റിന്റെ വേഗത ${windSpeed} മീറ്റർ.`
+        ];
 
-        const gtts = new gTTS(weatherSpeech, 'ml');
-        res.setHeader('Content-Type', 'audio/mpeg');
-        gtts.stream().pipe(res);
+        if (rain1h > 0) {
+            weatherChunks.push(`മഴ ${rain1h} മില്ലിമീറ്റർ.`);
+        }
 
-    } catch (error) {
-        console.error("Weather Error:", error);
-        res.status(500).json({ error: "Failed to fetch weather data." });
-    }
-});
+        res.json({
+            status: "success",
+            location: "Vattathani",
+            total_chunks: weatherChunks.length,
+            chunks: weatherChunks
+        });
 
-// 3. PRAYER TIMES FOR VATTATHANI / TIRUR (Click 10)
-app.get('/prayer/vattathani', async (req: Request, res: Response) => {
-    try {
-        const prayerUrl = `https://api.aladhan.com/v1/timings?latitude=10.9148&longitude=75.9235&method=2&utcOffset=+530`;
-        const response = await axios.get(prayerUrl);
-        const timings = response.data.data.timings;
-
-        let prayerSpeech = `ഇന്നത്തെ നിസ്കാര സമയങ്ങൾ. സുബ്ഹി ${timings.Fajr}, ദുഹ്ർ ${timings.Dhuhr}, അസർ ${timings.Asr}, മഗ്രിബ് ${timings.Maghrib}, ഇശാ ${timings.Isha}.`;
-
-        const gtts = new gTTS(prayerSpeech, 'ml');
-        res.setHeader('Content-Type', 'audio/mpeg');
-        gtts.stream().pipe(res);
-
-    } catch (error) {
-        console.error("Prayer Error:", error);
-        res.status(500).json({ error: "Failed to fetch prayer times." });
+    } catch (error: any) {
+        console.error("Weather API Error:", error.message);
+        res.status(500).json({ 
+            status: "error", 
+            message: "Weather fetch failed",
+            chunks: ["കാലാവസ്ഥ വിവരങ്ങൾ ലഭ്യമായില്ല."]
+        });
     }
 });
 
