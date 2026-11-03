@@ -95,10 +95,13 @@ app.get('/airport/:name', async (req: Request, res: Response) => {
     }
 });
 
-// 2. WEATHER FORECAST (Click 9 - Tirur / Malappuram)
-app.get('/weather/tirur', async (req: Request, res: Response) => {
+// 2. WEATHER FORECAST FOR VATTATHANI (Click 9)
+app.get('/weather/vattathani', async (req: Request, res: Response) => {
     try {
-        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=Malappuram,IN&units=metric&appid=${WEATHER_API_KEY}`;
+        const lat = "10.9148"; 
+        const lon = "75.9235";
+        
+        const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${WEATHER_API_KEY}`;
         const response = await axios.get(weatherUrl);
         const data = response.data;
 
@@ -106,7 +109,7 @@ app.get('/weather/tirur', async (req: Request, res: Response) => {
         const humidity = data.main.humidity;
         const windSpeed = data.wind.speed;
 
-        let weatherSpeech = `തിരൂർ കാലാവസ്ഥ വിവരങ്ങൾ. നിലവിലെ താപനില ${temp} ഡിഗ്രി സെൽഷ്യസ്. ആർദ്രത ${humidity} ശതമാനം. കാറ്റിന്റെ വേഗത മണിക്കൂറിൽ ${windSpeed} മീറ്റർ.`;
+        let weatherSpeech = `വട്ടത്താണി കാലാവസ്ഥ വിവരങ്ങൾ. നിലവിലെ താപനില ${temp} ഡിഗ്രി സെൽഷ്യസ്. ആർദ്രത ${humidity} ശതമാനം. കാറ്റിന്റെ വേഗത മണിക്കൂറിൽ ${windSpeed} മീറ്റർ.`;
 
         const gtts = new gTTS(weatherSpeech, 'ml');
         res.setHeader('Content-Type', 'audio/mpeg');
@@ -118,8 +121,8 @@ app.get('/weather/tirur', async (req: Request, res: Response) => {
     }
 });
 
-// 3. PRAYER TIMES (Click 10 - AlAdhan API with Lat/Long and IST Offset)
-app.get('/prayer/tirur', async (req: Request, res: Response) => {
+// 3. PRAYER TIMES FOR VATTATHANI / TIRUR (Click 10)
+app.get('/prayer/vattathani', async (req: Request, res: Response) => {
     try {
         const prayerUrl = `https://api.aladhan.com/v1/timings?latitude=10.9148&longitude=75.9235&method=2&utcOffset=+530`;
         const response = await axios.get(prayerUrl);
