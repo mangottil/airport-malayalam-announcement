@@ -143,7 +143,7 @@ function translateHolidayToMalayalam(holidayName: string): string {
 }
 
 // ============================================================
-// AIRPORT REQUEST HANDLER - ORIGINAL FUNCTIONALITY PRESERVED
+// AIRPORT REQUEST HANDLER - UPDATED HEADER CHUNKS (NO REPETITION)
 // ============================================================
 
 async function handleAirportRequest(
@@ -193,9 +193,10 @@ async function handleAirportRequest(
             return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
+        // വിമാനത്താവളത്തിന്റെ പേര് ആവർത്തിക്കാതെ ചെറിയ ചങ്കുകളായി ക്രമീകരിച്ചിരിക്കുന്നു
         let textChunks: string[] = [
-            `${airportMalayalamName} അനൗൺസ്മെന്റ്.`,
-            `അടുത്ത നാല് മണിക്കൂറിലെ ഫ്ലൈറ്റ് വിവരങ്ങൾ.`
+            `അടുത്ത നാല് മണിക്കൂറിനുള്ളിലെ`,
+            `ഫ്ലൈറ്റ് അറൈവൽ ഡിപ്പാർച്ചർ വിവരങ്ങൾ.`
         ];
 
         if (upcomingArrivals.length > 0) {
@@ -248,9 +249,10 @@ async function handleAirportRequest(
 }
 
 // ============================================================
-// AIRPORT ENDPOINTS
+// AIRPORT ENDPOINTS (ORDERED BY MASTER SWITCHES: 7, 8, 9, 10)
 // ============================================================
 
+// Switch 7: Calicut Airport
 app.get('/api/calicut', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CCJ',
@@ -259,6 +261,7 @@ app.get('/api/calicut', async (req: Request, res: Response) => {
     );
 });
 
+// Switch 8: Kochi Airport
 app.get('/api/kochi', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'COK',
@@ -267,18 +270,20 @@ app.get('/api/kochi', async (req: Request, res: Response) => {
     );
 });
 
-app.get('/api/trivandrum', async (req: Request, res: Response) => {
-    await handleAirportRequest(
-        'TRV',
-        'തിരുവനന്തപുരം അന്താരാഷ്ട്ര വിമാനത്താവളം',
-        res
-    );
-});
-
+// Switch 9: Coimbatore Airport
 app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CJB',
         'കോയമ്പത്തൂർ വിമാനത്താവളം',
+        res
+    );
+});
+
+// Switch 10: Trivandrum Airport
+app.get('/api/trivandrum', async (req: Request, res: Response) => {
+    await handleAirportRequest(
+        'TRV',
+        'തിരുവനന്തപുരം അന്താരാഷ്ട്ര വിമാനത്താവളം',
         res
     );
 });
