@@ -10,11 +10,11 @@ const WEATHER_API_KEY = process.env.WEATHER_API_KEY || "";
 app.use(express.json());
 
 app.get('/', (req: Request, res: Response) => {
-    res.send('Airport, Weather & Prayer Malayalam API is Live!');
+    res.send('Airport & Weather Malayalam API is Live!');
 });
 
 // ============================================================
-// EXISTING AIRPORT / WEATHER / PRAYER HELPERS
+// EXISTING AIRPORT / WEATHER HELPERS
 // ============================================================
 
 // Helper: Get Current exact IST Minutes from UTC server time
@@ -123,23 +123,6 @@ function getDestinationName(iata: string, isArrival: boolean): string {
     }
 
     return isArrival ? `${iata}-ൽ നിന്നും` : `${iata}-ലേക്ക്`;
-}
-
-// Helper to translate Islamic Holiday names to Malayalam
-function translateHolidayToMalayalam(holidayName: string): string {
-    const nameLower = holidayName.toLowerCase();
-
-    if (nameLower.includes("islamic new year") || nameLower.includes("hijri new year")) return "ഹിജ്‌റ പുതുവത്സരം";
-    if (nameLower.includes("ashura")) return "ആഷൂറാ ദിനം";
-    if (nameLower.includes("mawlid") || nameLower.includes("milad un-nabi")) return "നബിദിനം (മൗലിദ്)";
-    if (nameLower.includes("isra") || nameLower.includes("mi'raj")) return "ഇസ്രാഅ് വ മിഅ്‌റാജ് രാവ്";
-    if (nameLower.includes("bara'at") || nameLower.includes("sha'ban")) return "ബറാഅത്ത് രാവ്";
-    if (nameLower.includes("ramadan")) return "റമദാൻ വ്രതാരംഭം";
-    if (nameLower.includes("fitr")) return "ഈദുൽ ഫിത്ർ (ചെറിയ പെരുന്നാൾ)";
-    if (nameLower.includes("arafah")) return "അറഫാ ദിനം";
-    if (nameLower.includes("adha")) return "ഈദുൽ അദ്ഹാ (ബലിപെരുന്നാൾ)";
-
-    return holidayName;
 }
 
 // ============================================================
@@ -289,72 +272,6 @@ app.get('/api/trivandrum', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// PRAYER TIMES ENDPOINT - ORIGINAL FUNCTIONALITY PRESERVED
-// ============================================================
-
-app.get('/api/prayer', async (req: Request, res: Response) => {
-    try {
-        const prayerUrl =
-            `https://api.aladhan.com/v1/timings?latitude=10.9526&longitude=75.8989&method=2&utcOffset=+530`;
-
-        const response = await axios.get(prayerUrl, {
-            timeout: 15000
-        });
-
-        const data = response.data.data;
-        const timings = data.timings;
-        const hijri = data.date.hijri;
-        const holidays = hijri.holidays || [];
-
-        let prayerChunks: string[] = [
-            "തിരൂർ വട്ടത്താണിയിലെ ഇന്നത്തെ ഇസ്ലാമിക കലണ്ടർ വിവരങ്ങളും നിസ്കാര സമയങ്ങളും.",
-            `ഇന്നത്തെ ഹിജ്‌റ തീയതി: ${hijri.day}-ാം തീയതി, ${hijri.month.en} (${hijri.month.ar}) മാസം, ഹിജ്‌റ വർഷം ${hijri.year}.`
-        ];
-
-        if (holidays && holidays.length > 0) {
-            const translatedHolidays = holidays.map(
-                (h: string) => translateHolidayToMalayalam(h)
-            );
-
-            prayerChunks.push(
-                `ഇന്നത്തെ പ്രത്യേക വിശേഷ ദിവസം: ${translatedHolidays.join(', ')}.`
-            );
-        }
-
-        const prayerNames: { [key: string]: string } = {
-            "Fajr": "സുബ്ഹി",
-            "Dhuhr": "ദുഹ്ർ",
-            "Asr": "അസർ",
-            "Maghrib": "മഗ്രിബ്",
-            "Isha": "ഇശാ",
-            "Imsak": "ഇംസാക്"
-        };
-
-        for (const [key, malayalamName] of Object.entries(prayerNames)) {
-            if (timings[key]) {
-                prayerChunks.push(
-                    `${malayalamName} നിസ്കാര സമയം ${timings[key]}.`
-                );
-            }
-        }
-
-        res.json({
-            status: "success",
-            location: "Tirur Vattathani",
-            chunks: prayerChunks
-        });
-
-    } catch (error: any) {
-        console.error("Prayer Error:", error.message);
-
-        res.status(500).json({
-            status: "error",
-            chunks: ["പ്രാർത്ഥനാ സമയങ്ങൾ ലഭ്യമല്ല."]
-        });
-    }
-});
-
-// ============================================================
 // WEATHER ENDPOINT - ORIGINAL FUNCTIONALITY PRESERVED
 // ============================================================
 
@@ -490,7 +407,7 @@ app.get('/health', (req: Request, res: Response) => {
 
     res.json({
         status: "ok",
-        service: "Malayalam Airport Weather Prayer API",
+        service: "Malayalam Airport & Weather API",
         timestamp: new Date().toISOString()
     });
 });
