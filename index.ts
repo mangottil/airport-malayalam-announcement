@@ -88,7 +88,7 @@ function extractISTTimeString(dateTimeStr: string): string {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// Comprehensive Global Mapping Database
+// Comprehensive Global Mapping Database (Original restored)
 function getDestinationName(iata: string, isArrival: boolean): string {
     const database: {
         [key: string]: { from: string, to: string }
@@ -126,7 +126,7 @@ function getDestinationName(iata: string, isArrival: boolean): string {
 }
 
 // ============================================================
-// AIRPORT REQUEST HANDLER - UPDATED HEADER CHUNKS (NO REPETITION)
+// AIRPORT REQUEST HANDLER - CHUNKED WITHOUT OMITTING TEXT
 // ============================================================
 
 async function handleAirportRequest(
@@ -162,21 +162,17 @@ async function handleAirportRequest(
 
         const upcomingArrivals = arrivals.filter((f: any) => {
             if (!f.arr_time) return false;
-
             const flightMins = airLabsTimeToISTMinutes(f.arr_time);
-
             return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
         const upcomingDepartures = departures.filter((f: any) => {
             if (!f.dep_time) return false;
-
             const flightMins = airLabsTimeToISTMinutes(f.dep_time);
-
             return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
-        // വിമാനത്താവളത്തിന്റെ പേര് ആവർത്തിക്കാതെ ചെറിയ ചങ്കുകളായി ക്രമീകരിച്ചിരിക്കുന്നു
+        // Split into very short blocks to respect ESP32 limits
         let textChunks: string[] = [
             `അടുത്ത നാല് മണിക്കൂറിനുള്ളിലെ`,
             `ഫ്ലൈറ്റ് അറൈവൽ ഡിപ്പാർച്ചർ വിവരങ്ങൾ.`
@@ -188,9 +184,10 @@ async function handleAirportRequest(
                 const timeStr = extractISTTimeString(f.arr_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
 
-                textChunks.push(
-                    `${originText} ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, ${airportMalayalamName} എത്തിച്ചേരുന്ന സമയം ${timeStr}.`
-                );
+                textChunks.push(originText);
+                textChunks.push(`ഫ്ലൈറ്റ് നമ്പർ ${flightNo},`);
+                textChunks.push(airportMalayalamName);
+                textChunks.push(`എത്തിച്ചേരുന്ന സമയം ${timeStr}.`);
             });
         }
 
@@ -200,18 +197,19 @@ async function handleAirportRequest(
                 const timeStr = extractISTTimeString(f.dep_time);
                 const flightNo = f.flight_iata || f.flight_number || 'വിവരം';
 
-                textChunks.push(
-                    `${airportMalayalamName} നിന്നും ${destText} പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo}, സമയം ${timeStr}.`
-                );
+                textChunks.push(`${airportMalayalamName} നിന്നും`);
+                textChunks.push(destText);
+                textChunks.push(`പുറപ്പെടുന്ന ഫ്ലൈറ്റ് നമ്പർ ${flightNo},`);
+                textChunks.push(`സമയം ${timeStr}.`);
             });
         }
 
-        if (
-            upcomingArrivals.length === 0 &&
-            upcomingDepartures.length === 0
-        ) {
+        if (upcomingArrivals.length === 0 && upcomingDepartures.length === 0) {
             textChunks.push(
-                `നിലവിൽ അടുത്ത നാല് മണിക്കൂറിനുള്ളിൽ ഷെഡ്യൂൾ ചെയ്ത ഫ്ലൈറ്റുകൾ ഒന്നും ലഭ്യമല്ല.`
+                `നിലവിൽ അടുത്ത നാല് മണിക്കൂറിനുള്ളിൽ`
+            );
+            textChunks.push(
+                `ഷെഡ്യൂൾ ചെയ്ത ഫ്ലൈറ്റുകൾ ഒന്നും ലഭ്യമല്ല.`
             );
         }
 
@@ -232,10 +230,9 @@ async function handleAirportRequest(
 }
 
 // ============================================================
-// AIRPORT ENDPOINTS (ORDERED BY MASTER SWITCHES: 7, 8, 9, 10)
+// AIRPORT ENDPOINTS
 // ============================================================
 
-// Switch 7: Calicut Airport
 app.get('/api/calicut', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CCJ',
@@ -244,7 +241,6 @@ app.get('/api/calicut', async (req: Request, res: Response) => {
     );
 });
 
-// Switch 8: Kochi Airport
 app.get('/api/kochi', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'COK',
@@ -253,7 +249,6 @@ app.get('/api/kochi', async (req: Request, res: Response) => {
     );
 });
 
-// Switch 9: Coimbatore Airport
 app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CJB',
@@ -262,7 +257,6 @@ app.get('/api/coimbatore', async (req: Request, res: Response) => {
     );
 });
 
-// Switch 10: Trivandrum Airport
 app.get('/api/trivandrum', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'TRV',
@@ -272,7 +266,7 @@ app.get('/api/trivandrum', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// WEATHER ENDPOINT - ORIGINAL FUNCTIONALITY PRESERVED
+// WEATHER ENDPOINT - CHUNKED WITHOUT OMITTING TEXT
 // ============================================================
 
 app.get('/api/weather', async (req: Request, res: Response) => {
@@ -301,14 +295,10 @@ app.get('/api/weather', async (req: Request, res: Response) => {
         const windSpeed = data.wind.speed;
         const windDeg = data.wind.deg || 0;
         const pressure = data.main.pressure;
-        const visibility = data.visibility
-            ? (data.visibility / 1000)
-            : 10;
+        const visibility = data.visibility ? (data.visibility / 1000) : 10;
 
         const weatherDesc = data.weather[0]?.description || "";
-        const rain1h = data.rain && data.rain['1h']
-            ? data.rain['1h']
-            : 0;
+        const rain1h = data.rain && data.rain['1h'] ? data.rain['1h'] : 0;
 
         let windDirText = "ഉത്തര ദിശയിൽ നിന്നും";
 
@@ -335,52 +325,43 @@ app.get('/api/weather', async (req: Request, res: Response) => {
         const descLower = weatherDesc.toLowerCase();
 
         if (descLower.includes("broken clouds")) {
-            malayalamWeather =
-                "ആകാശം അങ്ങിങ്ങ് ചെറിയ തോതിൽ മേഘാവൃതമായിരിക്കുന്നു";
+            malayalamWeather = "ആകാശം അങ്ങിങ്ങ് ചെറിയ തോതിൽ മേഘാവൃതമായിരിക്കുന്നു";
         } else if (descLower.includes("scattered clouds")) {
-            malayalamWeather =
-                "ആകാശത്ത് ചിതറിക്കിടക്കുന്ന മേഘങ്ങളെ കാണാം";
+            malayalamWeather = "ആകാശത്ത് ചിതറിക്കിടക്കുന്ന മേഘങ്ങളെ കാണാം";
         } else if (descLower.includes("few clouds")) {
-            malayalamWeather =
-                "ആകാശത്ത് അപൂർവ്വമായി ചില മേഘക്കീറുകൾ കാണപ്പെടുന്നുണ്ട്";
+            malayalamWeather = "ആകാശത്ത് അപൂർവ്വമായി ചില മേഘക്കീറുകൾ കാണപ്പെടുന്നുണ്ട്";
         } else if (descLower.includes("overcast clouds")) {
-            malayalamWeather =
-                "ആകാശം പൂർണ്ണമായും കനത്ത മേഘങ്ങളാൽ മൂടപ്പെട്ടിരിക്കുന്നു";
+            malayalamWeather = "ആകാശം പൂർണ്ണമായും കനത്ത മേഘങ്ങളാൽ മൂടപ്പെട്ടിരിക്കുന്നു";
         } else if (descLower.includes("clear sky")) {
-            malayalamWeather =
-                "ആകാശം പൂർണ്ണമായും തെളിഞ്ഞ നിലയിലാണ്";
-        } else if (
-            descLower.includes("rain") ||
-            descLower.includes("drizzle")
-        ) {
-            malayalamWeather =
-                "പ്രദേശത്ത് മഴ അനുഭവപ്പെടുന്നുണ്ട്";
+            malayalamWeather = "ആകാശം പൂർണ്ണമായും തെളിഞ്ഞ നിലയിലാണ്";
+        } else if (descLower.includes("rain") || descLower.includes("drizzle")) {
+            malayalamWeather = "പ്രദേശത്ത് മഴ അനുഭവപ്പെടുന്നുണ്ട്";
         } else if (descLower.includes("thunderstorm")) {
-            malayalamWeather =
-                "ഇടിമിന്നലോട് കൂടിയ ശക്തമായ കാലാവസ്ഥയാണ്";
-        } else if (
-            descLower.includes("mist") ||
-            descLower.includes("fog")
-        ) {
-            malayalamWeather =
-                "പ്രദേശത്ത് മൂടൽമഞ്ഞ് അനുഭവപ്പെടുന്നുണ്ട്";
+            malayalamWeather = "ഇടിമിന്നലോട് കൂടിയ ശക്തമായ കാലാവസ്ഥയാണ്";
+        } else if (descLower.includes("mist") || descLower.includes("fog")) {
+            malayalamWeather = "പ്രദേശത്ത് മൂടൽമഞ്ഞ് അനുഭവപ്പെടുന്നുണ്ട്";
         }
 
         let weatherChunks: string[] = [
-            "മലപ്പുറം ജില്ലയിലെ തിരൂർ വട്ടത്താണി പ്രദേശത്തെക്കുറിച്ചുള്ള കാലാവസ്ഥാ വിവരങ്ങൾ.",
-            `ഇന്നത്തെ തിരൂർ വട്ടത്താണിയിലെ അന്തരീക്ഷ താപനില ${temp} ഡിഗ്രി സെൽഷ്യസ് ആണ്.`,
-            `ശരീരത്തിന് അനുഭവപ്പെടുന്ന താപനില ${feelsLike} ഡിഗ്രി സെൽഷ്യസ് ആയി രേഖപ്പെടുത്തിയിരിക്കുന്നു.`,
-            `കാലാവസ്ഥയുടെ അവസ്ഥ: ${malayalamWeather}.`,
-            `അന്തരീക്ഷത്തിലെ ഈർപ്പം അഥവാ ആർദ്രത ${humidity} ശതമാനമാണ്.`,
-            `കാറ്റിന്റെ വേഗതയും ദിശയും: ${windDirText} സെക്കൻഡിൽ ${windSpeed} മീറ്റർ വേഗതയിൽ കാറ്റ് വീശുന്നു.`,
+            "മലപ്പുറം ജില്ലയിലെ തിരൂർ വട്ടത്താണി",
+            "പ്രദേശത്തെക്കുറിച്ചുള്ള കാലാവസ്ഥാ വിവരങ്ങൾ.",
+            "ഇന്നത്തെ തിരൂർ വട്ടത്താണിയിലെ അന്തരീക്ഷ താപനില",
+            `${temp} ഡിഗ്രി സെൽഷ്യസ് ആണ്.`,
+            "ശരീരത്തിന് അനുഭവപ്പെടുന്ന താപനില",
+            `${feelsLike} ഡിഗ്രി സെൽഷ്യസ് ആയി രേഖപ്പെടുത്തിയിരിക്കുന്നു.`,
+            "കാലാവസ്ഥയുടെ അവസ്ഥ:",
+            `${malayalamWeather}.`,
+            "അന്തരീക്ഷത്തിലെ ഈർപ്പം അഥവാ ആർദ്രത",
+            `${humidity} ശതമാനമാണ്.`,
+            `കാറ്റിന്റെ വേഗതയും ദിശയും: ${windDirText}`,
+            `സെക്കൻഡിൽ ${windSpeed} മീറ്റർ വേഗതയിൽ കാറ്റ് വീശുന്നു.`,
             `അന്തരീക്ഷ മർദ്ദം ${pressure} ഹെക്ടോപാസ്കൽ ആണ്.`,
             `ദൂരക്കാഴ്ചയുടെ അളവ് ${visibility} കിലോമീറ്റർ ദൂരമുണ്ട്.`
         ];
 
         if (rain1h > 0) {
-            weatherChunks.push(
-                `കഴിഞ്ഞ ഒരു മണിക്കൂറിനിടയിലെ മഴയുടെ അളവ് ${rain1h} മില്ലിമീറ്റർ ആണ്.`
-            );
+            weatherChunks.push("കഴിഞ്ഞ ഒരു മണിക്കൂറിനിടയിലെ മഴയുടെ അളവ്");
+            weatherChunks.push(`${rain1h} മില്ലിമീറ്റർ ആണ്.`);
         }
 
         res.json({
@@ -404,7 +385,6 @@ app.get('/api/weather', async (req: Request, res: Response) => {
 // ============================================================
 
 app.get('/health', (req: Request, res: Response) => {
-
     res.json({
         status: "ok",
         service: "Malayalam Airport & Weather API",
@@ -417,6 +397,5 @@ app.get('/health', (req: Request, res: Response) => {
 // ============================================================
 
 app.listen(PORT, () => {
-
     console.log(`Server is running on port ${PORT}`);
 });
