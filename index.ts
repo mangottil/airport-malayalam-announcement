@@ -132,6 +132,7 @@ function getDestinationName(iata: string, isArrival: boolean): string {
 async function handleAirportRequest(
     iataCode: string,
     airportMalayalamName: string,
+    airportEnglishName: string,
     res: Response
 ) {
     try {
@@ -172,10 +173,11 @@ async function handleAirportRequest(
             return isWithinNext4Hours(flightMins, currentISTMins);
         });
 
-        // Split into very short blocks to respect ESP32 limits
+        // Split into very short English intro blocks to respect ESP32 limits
         let textChunks: string[] = [
-            `അടുത്ത നാല് മണിക്കൂറിനുള്ളിലെ`,
-            `ഫ്ലൈറ്റ് അറൈവൽ ഡിപ്പാർച്ചർ വിവരങ്ങൾ.`
+            `Attention passengers.`,
+            `${airportEnglishName} arrivals and departures`,
+            `for the next four hours.`
         ];
 
         if (upcomingArrivals.length > 0) {
@@ -213,6 +215,13 @@ async function handleAirportRequest(
             );
         }
 
+        // Closing announcement in Malayalam (chunked safely for ESP32 limits)
+        const closingAirportName = airportMalayalamName.replace(/വിമാനത്താവളം$/, 'വിമാനത്താവളത്തിലെ');
+        textChunks.push(`ഇതോടെ`);
+        textChunks.push(closingAirportName);
+        textChunks.push(`അടുത്ത നാല് മണിക്കൂറിലെ`);
+        textChunks.push(`ഫ്ലൈറ്റ് വിവരങ്ങൾ പൂർണ്ണമാകുന്നു.`);
+
         res.json({
             status: "success",
             airport: airportMalayalamName,
@@ -237,6 +246,7 @@ app.get('/api/calicut', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CCJ',
         'കോഴിക്കോട് കരിപ്പൂർ അന്താരാഷ്ട്ര വിമാനത്താവളം',
+        'Calicut Karipur Airport',
         res
     );
 });
@@ -245,6 +255,7 @@ app.get('/api/kochi', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'COK',
         'കൊച്ചി നെടുമ്പാശ്ശേരി അന്താരാഷ്ട്ര വിമാനത്താവളം',
+        'Cochin Nedumbassery Airport',
         res
     );
 });
@@ -253,6 +264,7 @@ app.get('/api/coimbatore', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'CJB',
         'കോയമ്പത്തൂർ വിമാനത്താവളം',
+        'Coimbatore Airport',
         res
     );
 });
@@ -261,6 +273,7 @@ app.get('/api/trivandrum', async (req: Request, res: Response) => {
     await handleAirportRequest(
         'TRV',
         'തിരുവനന്തപുരം അന്താരാഷ്ട്ര വിമാനത്താവളം',
+        'Trivandrum Airport',
         res
     );
 });
@@ -343,9 +356,12 @@ app.get('/api/weather', async (req: Request, res: Response) => {
         }
 
         let weatherChunks: string[] = [
-            "മലപ്പുറം ജില്ലയിലെ തിരൂർ വട്ടത്താണി",
-            "പ്രദേശത്തെക്കുറിച്ചുള്ള കാലാവസ്ഥാ വിവരങ്ങൾ.",
-            "ഇന്നത്തെ തിരൂർ വട്ടത്താണിയിലെ അന്തരീക്ഷ താപനില",
+            "Today's current weather forecast",
+            "for Tirur Vattathani Pattaruparambu premises.",
+            "തിരൂർ വട്ടത്താണി പട്ടരുപറമ്പ്",
+            "പ്രദേശത്തെ കാലാവസ്ഥാ വിവരങ്ങൾ.",
+            "തിരൂർ വട്ടത്താണി പട്ടരുപറമ്പ്",
+            "പ്രദേശത്തെ അന്തരീക്ഷ താപനില",
             `${temp} ഡിഗ്രി സെൽഷ്യസ് ആണ്.`,
             "ശരീരത്തിന് അനുഭവപ്പെടുന്ന താപനില",
             `${feelsLike} ഡിഗ്രി സെൽഷ്യസ് ആയി രേഖപ്പെടുത്തിയിരിക്കുന്നു.`,
@@ -364,9 +380,11 @@ app.get('/api/weather', async (req: Request, res: Response) => {
             weatherChunks.push(`${rain1h} മില്ലിമീറ്റർ ആണ്.`);
         }
 
+        weatherChunks.push("Thank you! Have a nice day.");
+
         res.json({
             status: "success",
-            location: "Tirur Vattathani",
+            location: "Tirur Vattathani Pattaruparambu",
             chunks: weatherChunks
         });
 
